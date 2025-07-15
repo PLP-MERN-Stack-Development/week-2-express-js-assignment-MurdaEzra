@@ -1,18 +1,31 @@
-// server.js - Starter Express server for Week 2 assignment
+// server.js - Completed Express server for Week 2 assignment
 
-// Import required modules
 const express = require('express');
 const bodyParser = require('body-parser');
 const { v4: uuidv4 } = require('uuid');
 
-// Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware setup
 app.use(bodyParser.json());
 
-// Sample in-memory products database
+// Custom Middleware: Request logging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// Custom Middleware: Simple Authentication (example using a static token)
+const AUTH_TOKEN = 'mysecrettoken123';
+app.use((req, res, next) => {
+  if (req.headers.authorization === `Bearer ${AUTH_TOKEN}` || req.path === '/') {
+    return next();
+  }
+  res.status(401).json({ error: 'Unauthorized: Invalid or missing token' });
+});
+
+// In-memory product store
 let products = [
   {
     id: '1',
@@ -40,32 +53,86 @@ let products = [
   }
 ];
 
-// Root route
+// Routes
 app.get('/', (req, res) => {
   res.send('Welcome to the Product API! Go to /api/products to see all products.');
 });
 
-// TODO: Implement the following routes:
-// GET /api/products - Get all products
-// GET /api/products/:id - Get a specific product
-// POST /api/products - Create a new product
-// PUT /api/products/:id - Update a product
-// DELETE /api/products/:id - Delete a product
-
-// Example route implementation for GET /api/products
+// GET all products
 app.get('/api/products', (req, res) => {
   res.json(products);
 });
 
-// TODO: Implement custom middleware for:
-// - Request logging
-// - Authentication
-// - Error handling
+// GET product by ID
+app.get('/api/products/:id', (req, res, next) => {
+  const product = products.find(p => p.id === req.params.id);
+  if (!product) {
+    return next({ status: 404, message: 'Product not found' });
+  }
+  res.json(product);
+});
 
-// Start the server
+// POST new product
+app.post('/api/products', (req, res, next) => {
+  const { name, description, price, category, inStock } = req.body;
+  if (!name || !description || price == null || !category || inStock == null) {
+    return next({ status: 400, message: 'Missing required product fields' });
+  }
+
+  const newProduct = {
+    id: uuidv4(),
+    name,
+    description,
+    price,
+    category,
+    inStock
+  };
+
+  products.push(newProduct);
+  res.status(201).json(newProduct);
+});
+
+// PUT update product
+app.put('/api/products/:id', (req, res, next) => {
+  const index = products.findIndex(p => p.id === req.params.id);
+  if (index === -1) {
+    return next({ status: 404, message: 'Product not found' });
+  }
+
+  const { name, description, price, category, inStock } = req.body;
+  const updatedProduct = {
+    ...products[index],
+    name: name ?? products[index].name,
+    description: description ?? products[index].description,
+    price: price ?? products[index].price,
+    category: category ?? products[index].category,
+    inStock: inStock ?? products[index].inStock
+  };
+
+  products[index] = updatedProduct;
+  res.json(updatedProduct);
+});
+
+// DELETE a product
+app.delete('/api/products/:id', (req, res, next) => {
+  const index = products.findIndex(p => p.id === req.params.id);
+  if (index === -1) {
+    return next({ status: 404, message: 'Product not found' });
+  }
+
+  const deleted = products.splice(index, 1);
+  res.json({ message: 'Product deleted', product: deleted[0] });
+});
+
+// Custom Middleware: Error handling
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(err.status || 500).json({ error: err.message || 'Server error' });
+});
+
+// Start server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
 
-// Export the app for testing purposes
-module.exports = app; 
+module.exports = app;
